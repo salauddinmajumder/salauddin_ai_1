@@ -23,6 +23,7 @@ DetectorFactory.seed = 0
 
 QUIZ_FILE = 'quizzes.json'
 
+
 def load_quizzes():
     if os.path.exists(QUIZ_FILE):
         with open(QUIZ_FILE, 'r') as file:
@@ -30,12 +31,15 @@ def load_quizzes():
             return {quiz["id"]: quiz for quiz in data["quizzes"]}
     return {}
 
+
 def save_quizzes(quizzes):
     with open(QUIZ_FILE, 'w') as file:
         data = {"quizzes": list(quizzes.values())}
         json.dump(data, file, indent=4)
 
+
 quizzes = load_quizzes()
+
 
 def extract_text_from_image(image_content):
     image = vision.Image(content=image_content)
@@ -44,6 +48,7 @@ def extract_text_from_image(image_content):
     if response.error.message:
         raise Exception(f'{response.error.message}')
     return texts[0].description if texts else ''
+
 
 def preprocess_extracted_text(text, primary_language):
     text = re.sub(r'[a-zA-Z0-9]+\s+to\s+[a-zA-Z0-9]+\s+', '', text)
@@ -70,6 +75,7 @@ def preprocess_extracted_text(text, primary_language):
 
     processed_text = ' '.join(cleaned_words)
     return processed_text
+
 
 def main():
     st.set_page_config(page_title="Quiz System", page_icon="📄", layout="wide")
@@ -132,38 +138,52 @@ def main():
     if page == "Home":
         st.title("📄 Quiz System")
         st.markdown("### Welcome! Please choose an option below:")
-        st.markdown(
-            """
-            <div class="gradient-box">
-                <h2>Select an Option</h2>
-                <button onclick="location.href = '#make_quiz';" class="big-button">Make a Quiz</button>
-                <button onclick="location.href = '#attend_quiz';" class="big-button">Attend a Quiz</button>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    elif page == "Make a Quiz":
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Make a Quiz"):
+                st.session_state.page = "Make a Quiz"
+        with col2:
+            if st.button("Attend a Quiz"):
+                st.session_state.page = "Attend a Quiz"
+
+    if page == "Make a Quiz" or st.session_state.get("page") == "Make a Quiz":
+        st.session_state.page = "Make a Quiz"
         make_quiz()
-    elif page == "Attend a Quiz":
+    elif page == "Attend a Quiz" or st.session_state.get("page") == "Attend a Quiz":
+        st.session_state.page = "Attend a Quiz"
         attend_quiz()
 
+
+def load_quizzes():
+    if os.path.exists(QUIZ_FILE):
+        with open(QUIZ_FILE, 'r') as file:
+            data = json.load(file)
+            return {quiz["id"]: quiz for quiz in data["quizzes"]}
+    return {}
+def save_quizzes(quizzes):
+    with open(QUIZ_FILE, 'w') as file:
+        data = {"quizzes": list(quizzes.values())}
+        json.dump(data, file, indent=4)
 def make_quiz():
     st.header("Make a Quiz")
     st.markdown("### Fill out the form below to create your quiz.")
 
     if "quiz_setup" not in st.session_state:
-        st.session_state.quiz_setup = {"name": "", "questions": []}
+        st.session_state.quiz_setup = {"name": "", "password": "", "questions": []}
 
     with st.form("quiz_form"):
         quiz_name = st.text_input("Quiz Name", value=st.session_state.quiz_setup["name"])
+        password = st.text_input("Password", type="password", value=st.session_state.quiz_setup["password"])
         question = st.text_input("Question")
         answer = st.text_input("Correct Answer")
         marks = st.number_input("Marks", min_value=1, step=1)
         time_limit = st.number_input("Time Limit (seconds)", min_value=10, step=5)
         add_question = st.form_submit_button("Add Question")
 
-        if add_question and quiz_name and question and answer:
+        if add_question and quiz_name and password and question and answer:
             st.session_state.quiz_setup["name"] = quiz_name
+            st.session_state.quiz_setup["password"] = password  # Capture password here
             st.session_state.quiz_setup["questions"].append({
                 "question": question,
                 "answer": answer,
@@ -185,65 +205,97 @@ def make_quiz():
             quizzes[quiz_id] = {
                 "id": quiz_id,
                 "name": st.session_state.quiz_setup["name"],
+                "password": st.session_state.quiz_setup["password"],
                 "questions": st.session_state.quiz_setup["questions"]
             }
             save_quizzes(quizzes)
-            st.session_state.quiz_setup = {"name": "", "questions": []}
+            st.session_state.quiz_setup = {"name": "", "password": "", "questions": []}
             st.success("Quiz submitted successfully!")
             st.experimental_rerun()
 
+
 def attend_quiz():
     st.header("Attend a Quiz")
-    st.markdown("### Select a quiz to start:")
 
-    quiz_options = {quiz_id: quiz["name"] for quiz_id, quiz in quizzes.items()}
-    selected_quiz_id = st.selectbox("Available Quizzes", options=list(quiz_options.keys()), format_func=lambda x: quiz_options[x])
+    # Radio buttons to choose between Search and Available Quizzes
+    action = st.radio("Choose an action", ["Search Quiz by Name", "View Available Quizzes"])
 
-    if selected_quiz_id:
-        quiz = quizzes[selected_quiz_id]
-        if "quiz_attend" not in st.session_state:
+    if action == "Search Quiz by Name":
+        quiz_name = st.text_input("Enter quiz name to search")
+        filtered_quizzes = {quiz_id: quiz["name"] for quiz_id, quiz in quizzes.items() if quiz["name"].lower() == quiz_name.lower()}
+        if st.button("Search"):
+            if quiz_name.strip() == "":
+                st.warning("Please enter a quiz name to search.")
+            elif not filtered_quizzes:
+                st.warning(f"No quiz found with the name '{quiz_name}'.")
+            else:
+                st.session_state.selected_quiz_id = list(filtered_quizzes.keys())[0]  # Assume only one quiz with the same name
+                st.session_state.quiz_password = quizzes[st.session_state.selected_quiz_id].get("password", "")  # Get password if available
+                st.success(f"Quiz '{quiz_name}' found. Please enter the password to proceed.")
+
+    elif action == "View Available Quizzes":
+        quiz_options = {quiz_id: quiz["name"] for quiz_id, quiz in quizzes.items()}
+        selected_quiz_id = st.selectbox("Available Quizzes", options=list(quiz_options.keys()), format_func=lambda x: quiz_options[x])
+
+        if st.button("Available Quizzes"):
+            if selected_quiz_id:
+                st.session_state.selected_quiz_id = selected_quiz_id
+                st.session_state.quiz_password = quizzes[selected_quiz_id].get("password", "")  # Get password if available
+                st.success(f"Selected quiz: '{quiz_options[selected_quiz_id]}'. Please enter the password to proceed.")
+
+    # Proceed with attending the selected quiz
+    if "selected_quiz_id" in st.session_state:
+        quiz = quizzes[st.session_state.selected_quiz_id]  # Assign quiz here
+
+        password_attempt = st.text_input("Enter Password", type="password")
+        if password_attempt == st.session_state.quiz_password:
+            st.success("Password correct! Starting quiz...")
+
+            # Quiz questions handling
             st.session_state.quiz_attend = {
-                "current_quiz": selected_quiz_id,
+                "current_quiz": st.session_state.selected_quiz_id,
                 "responses": [],
                 "time_started": time.time()
             }
 
-        if st.session_state.quiz_attend["current_quiz"] != selected_quiz_id:
-            st.session_state.quiz_attend["current_quiz"] = selected_quiz_id
-            st.session_state.quiz_attend["responses"] = []
-            st.session_state.quiz_attend["time_started"] = time.time()
+            total_time_limit = sum([q["time_limit"] for q in quiz["questions"]])
+            elapsed_time = time.time() - st.session_state.quiz_attend["time_started"]
+            remaining_time = total_time_limit - elapsed_time
 
-        total_time_limit = sum([q["time_limit"] for q in quiz["questions"]])
-        elapsed_time = time.time() - st.session_state.quiz_attend["time_started"]
-        remaining_time = total_time_limit - elapsed_time
+            if remaining_time <= 0:
+                st.warning("Time is up! Submitting your answers.")
+                submit_quiz(quiz)
+                return
 
-        if remaining_time <= 0:
-            st.warning("Time is up! Submitting your answers.")
-            submit_quiz(quiz)
-            return
+            st.write(f"Time remaining: {int(remaining_time)} seconds")
 
-        st.write(f"Time remaining: {int(remaining_time)} seconds")
+            with st.form("quiz_form"):
+                for i, question_data in enumerate(quiz["questions"]):
+                    st.markdown(f"### Question {i + 1}")
+                    st.markdown(question_data["question"])
+                    uploaded_file = st.file_uploader(f"Upload an Image for Question {i + 1}", type=["jpg", "jpeg", "png"], key=f"file_{i}")
 
-        with st.form("quiz_form"):
-            for i, question_data in enumerate(quiz["questions"]):
-                st.markdown(f"### Question {i + 1}")
-                st.markdown(question_data["question"])
-                uploaded_file = st.file_uploader(f"Upload an Image for Question {i + 1}", type=["jpg", "jpeg", "png"], key=f"file_{i}")
+                    if uploaded_file:
+                        image_content = uploaded_file.read()
+                        extracted_text = extract_text_from_image(image_content)
+                        language = detect(extracted_text)
+                        processed_text = preprocess_extracted_text(extracted_text, language)
+                        st.session_state.quiz_attend["responses"].append({
+                            "question_id": i,
+                            "response": processed_text
+                        })
 
-                if uploaded_file:
-                    image_content = uploaded_file.read()
-                    extracted_text = extract_text_from_image(image_content)
-                    language = detect(extracted_text)
-                    processed_text = preprocess_extracted_text(extracted_text, language)
-                    st.session_state.quiz_attend["responses"].append({
-                        "question_id": i,
-                        "response": processed_text
-                    })
+                if st.form_submit_button("Submit Quiz"):
+                    submit_quiz(quiz)
 
-            if st.form_submit_button("Submit Quiz"):
-                submit_quiz(quiz, processed_text)
+        else:
+            st.error("Incorrect password. Please try again.")
 
-def submit_quiz(quiz, processed_text=None):
+
+
+
+
+def submit_quiz(quiz):
     responses = st.session_state.quiz_attend["responses"]
     feedbacks = []
     total_marks = 0
@@ -255,10 +307,10 @@ def submit_quiz(quiz, processed_text=None):
         response = response_data["response"] if response_data else ""
         model = genai.GenerativeModel()
         prompt = f"""
-        Provide feedback for the student's answer based on the correct answer of the question:{question_data['question']}.It carries {question_data['marks']} marks. Evaluate based on understanding and grammar. Understanding has 70% marks and Grammar has 30% marks. Sum the marks and convert to percentage. Behave like a professional teacher of Economics. Give the feedback in bangla. You have to cover the following points: for example(they are just examples)- বোধগম্যতা:3/7, ব্যাকরণ:1/3, মোট:(40%) in one line, and ফিডব্যাক(in 5-10 points) in another line.
-        Correct answer: {correct_answer},
-        Student Answer: {processed_text}
-        """
+                Provide feedback for the student's answer based on the correct answer of the question: {question_data['question']}. It carries {question_data['marks']} marks. Evaluate based on understanding and grammar. Understanding has 70% marks and Grammar has 30% marks. Sum the marks and convert to percentage. Behave like a professional teacher of Economics. Give the feedback in Bangla. You have to cover the following points (examples): বোধগম্যতা: 3/7, ব্যাকরণ: 1/3, মোট: (40%) in one line, and ফিডব্যাক (in 5-10 points) in another line.
+                Correct answer: {correct_answer},
+                Student Answer: {response}
+                """
         feedback = model.generate_content(prompt)
         feedbacks.append(feedback.text)
         scored_marks = re.search(r"মোট:\((\d+)%\)", feedback.text)
@@ -271,7 +323,7 @@ def submit_quiz(quiz, processed_text=None):
     for i, feedback in enumerate(feedbacks):
         st.markdown(f"**Question {i + 1} Feedback:**")
         st.write(feedback)
-    st.write(f"**Total Score:** {total_scored/10}/{total_marks}")
+    st.write(f"**Total Score:** {total_scored / 10}/{total_marks}")
 
     st.session_state.quiz_attend = {
         "current_quiz": None,
