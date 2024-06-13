@@ -10,10 +10,10 @@ import streamlit as st
 import google.generativeai as genai
 
 # Set up environment variable for Google credentials
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'radiant-striker-422407-b0-3e3a43bf3b7e.json'
 
 # Configure generative AI
-GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+GOOGLE_API_KEY = 'AIzaSyAptnflQ56R3qudcZ-KTpvxH7zEHpqVt-8'
 genai.configure(api_key=GOOGLE_API_KEY)
 
 # Initialize Vision client and translator
